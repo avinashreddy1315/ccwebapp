@@ -1,0 +1,74 @@
+{
+   "AWSTemplateFormatVersion":"2010-09-09",
+   "Parameters":{
+    "Domain": {
+        "Description": "from email id",
+        "Type": "String"
+    },   
+    "mySNSTopicName": {
+        "Default": "reset_password",
+        "Description": "SNS Topic name",
+        "Type": "String"
+    }
+   },
+   "Resources":{
+       "MyLambdaFunction": {
+                "Type": "AWS::Lambda::Function",
+                "Properties": {
+                    "FunctionName": "MyLambdaFunction",
+                    "Handler": "index.handler",
+                    "Code": {
+                        "ZipFile": "exports.handler = (event, context, callback) => {\n    callback(null, \"Hello World!\");\n};\n"
+                    },
+                    "Role": {
+                        "Fn::ImportValue": "LambdaExecutionRoleARN"
+                    },
+                    "Description": "lambda to host webapp",
+                    "Environment": {
+                        "Variables": {"DOMAIN_NAME":{"Fn::Join":["",[{"Ref": "Domain" }]]}, "FROM_EMAIL":{"Fn::Join":["",["no-reply@test.",{"Ref": "Domain" }]]}, "TABLENAME":"csye6225", "TTL":"15"} 
+                    },
+                    "ReservedConcurrentExecutions" : 5,
+                    "Runtime": "nodejs8.10",
+                    "Timeout": 100,
+                    "MemorySize": 256
+                }
+            },
+            "MySNS": {
+                "Type": "AWS::SNS::Topic",
+                "DependsOn": "MyLambdaFunction",
+                "Properties": {
+                    "TopicName": { 
+                "Ref": "mySNSTopicName" 
+            },
+                    "Subscription": [
+                        {
+                            "Endpoint": {
+                                "Fn::GetAtt": [
+                                    "MyLambdaFunction",
+                                    "Arn"
+                                ]
+                            },
+                            "Protocol": "lambda"
+                        }
+                    ],
+                    "DisplayName": "MySNS"
+                }
+            },"LambdaResourcePolicy": {
+                "Type": "AWS::Lambda::Permission",
+                "Properties": {
+                    "FunctionName": {
+                        "Fn::GetAtt": [
+                            "MyLambdaFunction",
+                            "Arn"
+                        ]
+                    },
+                    "Principal": "sns.amazonaws.com",
+                    "Action": "lambda:InvokeFunction",
+                    "SourceArn": {
+                            "Ref": "MySNS"
+                        
+                    }
+                }
+            }
+        }
+}

@@ -1,0 +1,264 @@
+  {
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Cloud Formation Template - CSYE6225 - Setting up Application Resources",
+    "Parameters": {
+        "networkStackName": {
+            "Type": "String"
+        },
+        "AMI": {
+            "Type": "String"
+        },
+        "s3bucketName": {
+            "Description": "s3bucketName for web",
+            "Type": "String"
+        },"S3CodeBucket": {
+            "Type": "String"
+        }
+        
+        
+    },
+    "Resources": {
+        "MyRDSDB": {
+            "Type": "AWS::RDS::DBInstance",
+            "DeletionPolicy": "Delete",
+            "Properties": {
+                "AllocatedStorage": "10",
+                "MultiAZ": "False",
+                "DBInstanceIdentifier": "csye6225-su19",
+                "DBInstanceClass": "db.t2.micro",
+                "MasterUsername": "csye6225master",
+                "MasterUserPassword": "csye6225password",
+                "Engine": "MySQL",
+                "EngineVersion": "5.6.35",
+                "DBName": "csye6225",
+                "DBSubnetGroupName": {
+                    "Ref": "dbSubnetGroup"
+                },
+                "PubliclyAccessible": true,
+                "VPCSecurityGroups": [
+                    {
+                        "Ref": "DBSecurityGroup"
+                    }
+                ]
+            }
+        },
+        "EC2Instance": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "InstanceType": "t2.micro",
+                "DisableApiTermination": false,
+                "ImageId": {
+                    "Ref": "AMI"
+                },
+                "IamInstanceProfile":{
+                    "Fn::ImportValue" : "RootInstanceProfile"
+                },
+                "NetworkInterfaces": [
+                    {
+                        "AssociatePublicIpAddress": "true",
+                        "DeviceIndex": "0",
+                        "GroupSet": [
+                            {
+                                "Ref": "WebServerSecurityGroup"
+                            }
+                        ],
+                        "SubnetId": {
+                            "Fn::ImportValue": {
+                                "Fn::Sub": "${networkStackName}-myPublicSubnet1"
+                            }
+                        }
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "EC2-Server"
+                    }
+                ],
+                "BlockDeviceMappings": [
+                    {
+                        "DeviceName": "/dev/sda1",
+                        "Ebs": {
+                            "VolumeSize": "20",
+                            "VolumeType": "gp2",
+                            "DeleteOnTermination": true
+                        }
+                    }
+                ],
+                "KeyName": "csye6225",
+
+            "UserData": {
+                   "Fn::Base64": {
+                       "Fn::Join": [
+                           "",
+                        [
+                         "#!/bin/bash\n",
+                          "sudo su\n",
+                          "sudo systemctl stop tomcat\n",
+                          "echo \"#!/bin/sh\n\" >> /opt/tomcat/bin/setenv.sh\n",
+                          "echo \"\nJAVA_OPTS=\\$JAVA_OPTS\" >>/opt/tomcat/bin/setenv.sh\n",
+                          "echo \"JAVA_OPTS=\\\"\\${JAVA_OPTS} -Dprofile=dev -Ddomain=",
+                          {"Fn::GetAtt":["MyRDSDB","Endpoint.Address"]},
+                          " -Ddatabase=csye6225 -DsqlUsername=csye6225master -DsqlPassword=csye6225password",
+                          " -Dspring.bucket.name=",{ "Ref": "s3bucketName"},"\"\\\" >>/opt/tomcat/bin/setenv.sh\n",
+                          "echo \"export JAVA_OPTS\" >> /opt/tomcat/bin/setenv.sh\n",
+                          "sudo chmod +x /opt/tomcat/bin/setenv.sh\n",
+                          "sudo systemctl start tomcat\n",
+                          "sudo mv /tmp/cloudwatch-config.json /opt/cloudwatch-config.json\n",
+                          "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/cloudwatch-config.json -s\n",
+                          "sudo systemctl start amazon-cloudwatch-agent.service\n",
+                          "sudo systemctl status amazon-cloudwatch-agent.service\n"
+                          
+                        ]
+                       ]
+                     }
+                   }
+        }
+    },
+        "WebServerSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Access to ports 22, 80 & 443 for webapp",
+                "GroupName": "csye6225-securitygroup",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "22",
+                        "ToPort": "22",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "80",
+                        "ToPort": "80",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "443",
+                        "ToPort": "443",
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "FromPort": "8080",
+                        "IpProtocol": "tcp",
+                        "ToPort": "8080"   ,
+                        "CidrIp": "0.0.0.0/0"
+
+                    }
+                ],
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Sub": "${networkStackName}-myVPC"
+                    }
+                }
+            }
+        },
+        "AWSdynamotable": {
+            "Type": "AWS::DynamoDB::Table",
+            "DeletionPolicy": "Delete",
+            "Properties": {
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "id",
+                        "AttributeType": "S"
+                    }
+                ],
+                "TableName": "csye6225",
+                "KeySchema": [
+                    {
+                        "AttributeName": "id",
+                        "KeyType": "HASH"
+                    }
+                ],
+                "ProvisionedThroughput": {
+                    "ReadCapacityUnits": 5,
+                    "WriteCapacityUnits": 5
+                }
+            }
+        },
+        "DBSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Creating Security group for webapp using Ingress rules",
+                "GroupName": "csye6225-DBsecuritygroup",
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": "3306",
+                        "ToPort": "3306",
+                        "SourceSecurityGroupId": {
+                            "Ref": "WebServerSecurityGroup"
+                        }
+                    }
+                ],
+                "VpcId": {
+                    "Fn::ImportValue": {
+                        "Fn::Sub": "${networkStackName}-myVPC"
+                    }
+                }
+            }
+        },
+        "dbSubnetGroup": {
+            "Type": "AWS::RDS::DBSubnetGroup",
+            "Properties": {
+                "DBSubnetGroupDescription": "RDS Subnet Group",
+                "DBSubnetGroupName": "rds",
+                "SubnetIds": [
+
+                        {
+                            "Fn::ImportValue": {
+                                "Fn::Sub": "${networkStackName}-myPublicSubnet1"
+                            }
+                        },
+                        {
+                            "Fn::ImportValue": {
+                                "Fn::Sub": "${networkStackName}-myPublicSubnet2"
+                            }
+                        },
+                        {
+                            "Fn::ImportValue": {
+                                "Fn::Sub": "${networkStackName}-myPublicSubnet3"
+                            }
+                        }
+
+                ]
+            }
+        },
+
+        "CodeDeployApplication": {
+          "Type": "AWS::CodeDeploy::Application",
+          "Properties": {
+            "ApplicationName": "csye6225-webapp",
+            "ComputePlatform": "Server"
+          }
+        },
+        "DeploymentGroup": {
+          "Type": "AWS::CodeDeploy::DeploymentGroup",
+          "Properties": {
+            "ApplicationName": {
+              "Ref": "CodeDeployApplication"
+            },
+            "DeploymentConfigName": "CodeDeployDefault.AllAtOnce",
+            "DeploymentGroupName": "csye6225-webapp-deployment",
+            "DeploymentStyle" : {
+              "DeploymentType": "IN_PLACE",
+              "DeploymentOption": "WITHOUT_TRAFFIC_CONTROL"
+            },
+            "AutoRollbackConfiguration": {
+                "Events": [
+                    "DEPLOYMENT_FAILURE"
+                ]
+            },
+            "Ec2TagFilters": [
+                {
+                    "Key": "Name",
+                    "Value": "EC2-Server",
+                    "Type": "KEY_AND_VALUE"
+                }
+            ],
+            "ServiceRoleArn": {"Fn::ImportValue" : "CodeDeployServiceRole" }
+          }
+        }
+    }
+}

@@ -1,0 +1,10 @@
+[
+  {
+  "ParameterKey" : "stackName",
+  "ParameterValue":"NetworkStack"
+},
+{
+"ParameterKey" : "stackName",
+"ParameterValue":"NetworkStack"
+},
+]

@@ -1,0 +1,144 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "",
+    "Metadata": {
+
+    },
+    "Parameters": {
+      "stackName": {
+          "Description": "Stack Name for the tags",
+          "Type": "String"
+      },
+      "cidrBlock": {
+          "Description": "cidrBlock for my VPC",
+          "Type": "String"
+      }
+    },
+    "Mappings": {
+
+    },
+    "Conditions": {
+
+    },
+    "Resources": {
+      "myVPC": {
+        "Type": "AWS::EC2::VPC",
+        "Properties": {
+          "CidrBlock": { "Ref": "cidrBlock" },
+	"EnableDnsSupport":"true",
+	"EnableDnsHostnames":"true",
+	"InstanceTenancy":"default",	
+          "Tags": [{ "Key": "Name", "Value": {"Fn::Join" : [ "-", [ { "Ref": "stackName" },"myVPC" ] ]} }]
+        }
+      },
+      "myPublicSubnet1": {
+        "Type": "AWS::EC2::Subnet",
+        "Properties": {
+          "AvailabilityZone": { "Fn::Select": [0, {"Fn::GetAZs": { "Ref" : "AWS::Region" } }]},
+          "VpcId": { "Ref": "myVPC" },
+          "CidrBlock": {
+            "Fn::Select": [0, { "Fn::Cidr": [{"Ref": "cidrBlock"}, 3, 14]}]
+          },
+          "Tags": [{ "Key": "Name", "Value":  {"Fn::Join" : [ "-", [{ "Ref": "stackName"},"myPublicSubnet1"]]} }]
+        }
+      },
+      "myPublicSubnet2": {
+        "Type": "AWS::EC2::Subnet",
+        "Properties": {
+          "AvailabilityZone": { "Fn::Select": [1, {"Fn::GetAZs": { "Ref" : "AWS::Region" } }]},
+          "VpcId": { "Ref": "myVPC" },
+          "CidrBlock": {
+            "Fn::Select": [1, { "Fn::Cidr": [{"Ref": "cidrBlock"}, 3, 14]}]
+          },
+          "Tags": [{ "Key": "Name", "Value":  {"Fn::Join" : [ "-", [{ "Ref": "stackName"},"myPublicSubnet2"]]} }]
+        }
+      },
+      "myPublicSubnet3": {
+        "Type": "AWS::EC2::Subnet",
+        "Properties": {
+          "AvailabilityZone": { "Fn::Select": [2, {"Fn::GetAZs": { "Ref" : "AWS::Region" } }]},
+          "VpcId": { "Ref": "myVPC" },
+          "CidrBlock": {
+            "Fn::Select": [2, { "Fn::Cidr": [{"Ref": "cidrBlock"}, 3, 14]}]
+          },
+          "Tags": [{ "Key": "Name", "Value":  {"Fn::Join" : [ "-", [{ "Ref": "stackName"},"myPublicSubnet3"]]} }]
+        }
+      },
+      "myInternetGateway": {
+        "Type": "AWS::EC2::InternetGateway",
+        "Properties": {
+          "Tags": [{ "Key": "Name", "Value":  {"Fn::Join" : [ "-", [{ "Ref": "stackName"},"myInternetGateway"]]} }]
+        }
+      },
+
+      "AttachGateway": {
+        "Type": "AWS::EC2::VPCGatewayAttachment",
+        "Properties": {
+          "VpcId": { "Ref": "myVPC" },
+          "InternetGatewayId": { "Ref": "myInternetGateway" }
+        }
+      },
+      "myRouteTable": {
+        "Type": "AWS::EC2::RouteTable",
+        "Properties": {
+          "VpcId": { "Ref": "myVPC" },
+          "Tags": [{ "Key": "Name", "Value":  {"Fn::Join" : [ "-", [{ "Ref": "stackName"},"myRouteTable"]]} }]
+        }
+      },
+      "routeName": {
+        "Type": "AWS::EC2::Route",
+        "Properties": {
+          "RouteTableId": { "Ref": "myRouteTable" },
+          "DestinationCidrBlock": "0.0.0.0/0",
+          "GatewayId": { "Ref": "myInternetGateway" }
+        }
+      },
+      "routeTableAssocSubnet1": {
+        "Type": "AWS::EC2::SubnetRouteTableAssociation",
+        "Properties": {
+          "SubnetId": { "Ref": "myPublicSubnet1" },
+          "RouteTableId": { "Ref": "myRouteTable" }
+        }
+      },
+      "routeTableAssocSubnet2": {
+        "Type": "AWS::EC2::SubnetRouteTableAssociation",
+        "Properties": {
+          "SubnetId": { "Ref": "myPublicSubnet2" },
+          "RouteTableId": { "Ref": "myRouteTable" }
+        }
+      },
+      "routeTableAssocSubnet3": {
+        "Type": "AWS::EC2::SubnetRouteTableAssociation",
+        "Properties": {
+          "SubnetId": { "Ref": "myPublicSubnet3" },
+          "RouteTableId": { "Ref": "myRouteTable" }
+        }
+      }
+    },
+"Outputs": {
+	"myVPC" : {
+		"Value" : { "Ref" : "myVPC" },
+		"Export" : {
+			"Name" : { "Fn::Sub" : "${AWS::StackName}-myVPC" }
+		}
+	},
+	"myPublicSubnet1" : {
+		"Value" : { "Ref" : "myPublicSubnet1" },
+		"Export" : {
+			"Name" : { "Fn::Sub" : "${AWS::StackName}-myPublicSubnet1" }
+		}
+	},
+	"myPublicSubnet2" : {
+		"Value" : { "Ref" : "myPublicSubnet2" },
+		"Export" : {
+			"Name" : { "Fn::Sub" : "${AWS::StackName}-myPublicSubnet2" }
+		}
+	},
+	"myPublicSubnet3" : {
+		"Value" : { "Ref" : "myPublicSubnet3" },
+		"Export" : {
+			"Name" : { "Fn::Sub" : "${AWS::StackName}-myPublicSubnet3" }
+		}
+	}
+    }
+}
